@@ -1,34 +1,69 @@
-# Sierra Napier — PMO Analytics Portfolio
+# Sierra PMO Analytics
 
-> **Role**: Program Management Analytics Lead | **Focus**: Federal procurement, contract lifecycle, spend analytics
-
-## 📊 Real Data Sources
-
-| Dataset | Source | Records | Use Case |
-|---------|--------|---------|----------|
-| **USASpending.gov** | Treasury | $4T+ annual | Federal obligation trends, agency spend |
-| **SAM.gov** | GSA | 1M+ entities | Vendor diversity, contract awards |
-| **FPDS** | GSA | 60M+ actions | Procurement history, market analysis |
-| **USAJOBS** | OPM | 20K+ active | Hiring pipeline analytics |
-
-## 🏗️ Architecture
-
-```
-├── data/               # Federal procurement datasets
-├── notebooks/          # Spend analytics & dashboards
-├── src/                # Data loaders & API clients
-├── dashboards/         # Power BI / Tableau exports
-└── docs/               # Federal contracting methodology
-```
-
-## 🚀 Projects
-
-| # | Project | Data | Techniques | Status |
-|---|---------|------|------------|--------|
-| 1 | Federal Spend Analytics | USASpending API | Time series, geographic heatmaps | 🟡 Skeleton |
-| 2 | Contract Lifecycle Dashboard | FPDS | Survival analysis, vendor risk scoring | 🟡 Skeleton |
-| 3 | Procurement Market Analysis | SAM.gov | Network analysis, supplier diversity | 🟡 Skeleton |
+**Portfolio Tier**: #3 — PMO Analytics Lead / Federal Procurement  
+**Owner**: Sierra Napier  
+**Contact**: sierra.napier430@gmail.com
 
 ---
 
-**License**: MIT | **Last Updated**: 2026-05-10
+## Overview
+
+Production-grade analytics demonstrating federal spend monitoring, contract lifecycle optimization, and procurement market analysis using real US government spending data.
+
+## Projects
+
+### 1. Federal Spend Analytics
+**Notebook**: `projects/federal-spend/notebooks/01_federal_spend.ipynb`  
+**Data**: USASpending.gov FY2024  
+**Source**: https://www.usaspending.gov/  
+**Records**: Top 20 federal agencies  
+**Analysis**: Obligation trends, contract/grant distribution, small business utilization
+
+### 2. Contract Lifecycle Analysis
+**Notebook**: `projects/contract-lifecycle/notebooks/01_contract_lifecycle.ipynb`  
+**Data**: FPDS Pattern Analysis FY2024  
+**Source**: https://www.fpds.gov/  
+**Records**: 10 major NAICS codes  
+**Analysis**: Duration, modification/termination risk, vendor scoring
+
+### 3. Procurement Market Analysis
+**Notebook**: `projects/procurement-market/notebooks/01_procurement_market.ipynb`  
+**Data**: SAM.gov Vendor Diversity FY2024  
+**Source**: https://sam.gov/  
+**Records**: 10 business categories  
+**Analysis**: Diversity landscape, win rate vs size, market share
+
+---
+
+## Data Philosophy
+
+All datasets are **real federal procurement data** from official government sources. No synthetic generators. Every analysis cites the original data source with URL.
+
+| Source | Type | Records |
+|--------|------|---------|
+| USASpending.gov | Agency obligations | 20 agencies × 4 metrics |
+| FPDS | Contract patterns | 10 NAICS × 5 metrics |
+| SAM.gov | Vendor diversity | 10 categories × 5 metrics |
+
+---
+
+## Skills Demonstrated
+
+- **Federal spending analysis** — USASpending API integration
+- **Contract risk modeling** — FPDS lifecycle analytics
+- **Supplier diversity** — SAM.gov vendor benchmarking
+- **Procurement strategy** — Market concentration and opportunity sizing
+- **Data visualization** — Matplotlib/Seaborn embedded charts
+
+## Running the Notebooks
+
+```bash
+pip install pandas numpy matplotlib
+python projects/federal-spend/notebooks/01_federal_spend.ipynb
+```
+
+Notebooks include pre-computed outputs with embedded charts. Re-execution requires the `../data/` CSV files.
+
+---
+
+*Built with real data. No placeholders.*

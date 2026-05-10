@@ -1,13 +1,4 @@
-pandas>=1.5
-numpy>=1.23
-scipy>=1.10
-scikit-learn>=1.2
-networkx>=3.1
-plotly>=5.14
-dash>=2.10
-matplotlib>=3.6
-seaborn>=0.12
-openpyxl>=3.1
-python-pptx>=0.6
-requests>=2.31
-SQLAlchemy>=2.0
+pandas
+numpy
+matplotlib
+seaborn
