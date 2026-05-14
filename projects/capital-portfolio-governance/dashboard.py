@@ -1,165 +1,239 @@
-#!/usr/bin/env python3
 """
 Capital Portfolio Governance Dashboard
-Streamlit application for visualizing $300M+ transit capital programs.
+Streamlit app for visualizing federal transit investment portfolio.
 
-Data sources:
-- USASpending.gov: Federal grant awards (FTA, FHWA)
-- FTA NTD: Capital expenses by transit agency
-- WMATA: Capital improvement program (documented)
-- EVM Analysis: CPI, SPI, EAC, VAC metrics
-- Variance Analysis: Budget vs actual tracking
-
-Run: streamlit run dashboard.py
+Run with: streamlit run dashboard.py
 """
+
+import json
+import math
+from pathlib import Path
+from datetime import datetime
+from collections import Counter, defaultdict
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
 
-st.set_page_config(page_title="Capital Portfolio Governance", layout="wide")
+# Page config
+st.set_page_config(
+    page_title="Capital Portfolio Governance",
+    page_icon="🚇",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-BASE = Path(__file__).parent.parent
-DATA_DIR = BASE / "data"
+DATA_DIR = Path(__file__).parent / "data"
 
-st.title("Capital Portfolio Governance Dashboard")
-st.markdown("**Tracking $300M+ federal transit capital programs**")
-st.markdown("*Data: USASpending.gov | FTA NTD | WMATA Capital Program*")
+# ── Helpers ────────────────────────────────────────────────────────
 
-# Load data
+def load_json(filepath: Path) -> list[dict]:
+    """Load JSON data file."""
+    if not filepath.exists():
+        return []
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, list) else []
+
+
 @st.cache_data
-def load_data():
-    datasets = {}
-    # USASpending
-    usaspending = DATA_DIR / "usaspending_transit_grants.csv"
-    if usaspending.exists():
-        datasets["usaspending"] = pd.read_csv(usaspending)
-    # EVM
-    evm = DATA_DIR / "evm_analysis.csv"
-    if evm.exists():
-        datasets["evm"] = pd.read_csv(evm)
-    # Variance
-    variance = DATA_DIR / "variance_analysis.csv"
-    if variance.exists():
-        datasets["variance"] = pd.read_csv(variance)
-    # NTD
-    ntd = DATA_DIR / "ntd_capital_expenses.csv"
-    if ntd.exists():
-        datasets["ntd"] = pd.read_csv(ntd)
-    return datasets
+def load_all_data() -> dict:
+    """Load all data sources."""
+    return {
+        "grants": load_json(DATA_DIR / "usaspending_transit_grants.json"),
+        "evm": load_json(DATA_DIR / "evm_results.json"),
+        "variance": load_json(DATA_DIR / "variance_report.json"),
+    }
 
-data = load_data()
 
-# Portfolio Overview
-st.header("Portfolio Overview")
+# ── Sidebar ────────────────────────────────────────────────────────
+
+st.sidebar.title("🚇 Capital Portfolio Governance")
+st.sidebar.markdown("Federal Transit Investment Portfolio Dashboard")
+st.sidebar.divider()
+
+# Data freshness
+data = load_all_data()
+total_grants = len(data["grants"])
+has_data = total_grants > 0
+
+if not has_data:
+    st.sidebar.error("⚠️ No data found. Run the download scripts first.")
+    st.sidebar.code("python src/download_usaspending.py", language="bash")
+    st.stop()
+
+st.sidebar.success(f"✅ {total_grants} grants loaded")
+
+# Filters
+st.sidebar.subheader("Filters")
+
+# Agency filter
+agencies = sorted(set(g.get("Awarding Sub Agency", "Unknown") for g in data["grants"]))
+selected_agency = st.sidebar.selectbox("Agency", ["All"] + agencies)
+
+# CFDA filter
+cfdas = sorted(set(g.get("CFDA Number", "Unknown") for g in data["grants"]))
+selected_cfda = st.sidebar.selectbox("CFDA Program", ["All"] + cfdas)
+
+# Apply filters
+filtered_grants = data["grants"]
+if selected_agency != "All":
+    filtered_grants = [g for g in filtered_grants if g.get("Awarding Sub Agency") == selected_agency]
+if selected_cfda != "All":
+    filtered_grants = [g for g in filtered_grants if g.get("CFDA Number") == selected_cfda]
+
+st.sidebar.divider()
+st.sidebar.info(f"Showing {len(filtered_grants)} grants after filters")
+
+# ── Main Content ───────────────────────────────────────────────────
+
+st.title("Capital Portfolio Governance")
+st.caption("Federal Transit Administration (FTA) Investment Portfolio — Real data from USASpending.gov")
+
+# ── KPI Cards ──────────────────────────────────────────────────────
+
+st.subheader("Portfolio Overview")
+
 col1, col2, col3, col4 = st.columns(4)
 
-if "usaspending" in data:
-    df = data["usaspending"]
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-    total = df["amount"].sum()
-    count = len(df)
-    agencies = df["awarding_sub_agency"].nunique()
+with col1:
+    st.metric("Total Grants", len(filtered_grants))
 
-    col1.metric("Total Obligations", f"${total/1e9:.1f}B")
-    col2.metric("Active Awards", count)
-    col3.metric("Funding Agencies", agencies)
-    col4.metric("States", df["place_of_performance_state"].nunique())
-else:
-    st.warning("Run `python src/download_usaspending.py` to load portfolio data.")
+with col2:
+    total_value = sum(float(g.get("Award Amount", 0)) for g in filtered_grants)
+    st.metric("Portfolio Value", f"${total_value:,.0f}")
 
-# Tabs for detailed views
-tab1, tab2, tab3, tab4 = st.tabs(["Award Distribution", "EVM Metrics", "Variance Tracking", "Agency Analysis"])
+with col3:
+    avg_value = total_value / len(filtered_grants) if filtered_grants else 0
+    st.metric("Avg Grant", f"${avg_value:,.0f}")
 
-with tab1:
-    if "usaspending" in data:
-        df = data["usaspending"]
-        st.subheader("Award Amount Distribution")
-        fig = px.histogram(df, x="amount", color="awarding_sub_agency",
-                           nbins=50, log_x=True,
-                           title="Federal Transit Grant Distribution (Log Scale)")
-        st.plotly_chart(fig, use_container_width=True)
+with col4:
+    evm_filtered = [e for e in data["evm"] if any(e.get("award_id") == g.get("Award ID") for g in filtered_grants)]
+    avg_cpi = sum(e["CPI"] for e in evm_filtered) / len(evm_filtered) if evm_filtered else 0
+    st.metric("Avg CPI", f"{avg_cpi:.2f}", delta=f"{'On Track' if avg_cpi >= 0.95 else 'At Risk'}")
 
-        st.subheader("Top Recipients")
-        top_recipients = df.groupby("recipient")["amount"].sum().nlargest(10).reset_index()
-        fig2 = px.bar(top_recipients, x="amount", y="recipient",
-                      orientation="h", title="Top 10 Recipients by Total Obligations")
-        st.plotly_chart(fig2, use_container_width=True)
+st.divider()
 
-        st.subheader("Awards by State")
-        state_data = df.groupby("place_of_performance_state")["amount"].sum().reset_index()
-        fig3 = px.choropleth(state_data, locations="place_of_performance_state",
-                             locationmode="USA-states", color="amount",
-                             scope="usa", title="Transit Grants by State")
-        st.plotly_chart(fig3, use_container_width=True)
+# ── Agency Breakdown ───────────────────────────────────────────────
 
-with tab2:
-    if "evm" in data:
-        evm_df = data["evm"]
-        st.subheader("Earned Value Management Metrics")
+st.subheader("Agency Breakdown")
 
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Avg CPI", f"{evm_df['cpi'].mean():.3f}")
-        col_b.metric("Avg SPI", f"{evm_df['spi'].mean():.3f}")
-        col_c.metric("Total VAC", f"${evm_df['vac'].sum()/1e6:.1f}M")
+agency_data = Counter(g.get("Awarding Sub Agency", "Unknown") for g in filtered_grants)
+agency_df = pd.DataFrame([
+    {"Agency": k, "Grants": v, "Total Value": sum(float(g.get("Award Amount", 0)) for g in filtered_grants if g.get("Awarding Sub Agency") == k)}
+    for k, v in agency_data.most_common()
+])
 
-        # CPI/SPI scatter
-        fig = px.scatter(evm_df, x="spi", y="cpi", color="health_status",
-                         size="bac", hover_data=["award_id", "recipient"],
-                         title="CPI vs SPI by Project")
-        fig.add_hline(y=1.0, line_dash="dash", line_color="red")
-        fig.add_vline(x=1.0, line_dash="dash", line_color="red")
-        st.plotly_chart(fig, use_container_width=True)
+if not agency_df.empty:
+    agency_chart = agency_df.set_index("Agency")["Grants"]
+    st.bar_chart(agency_chart)
+    st.dataframe(agency_df.sort_values("Total Value", ascending=False), use_container_width=True)
 
-        # EAC distribution
-        fig2 = px.histogram(evm_df, x="eac", color="health_status",
-                            title="Estimate at Completion Distribution")
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("Run `python src/evm_calculator.py` to generate EVM data.")
+st.divider()
 
-with tab3:
-    if "variance" in data:
-        var_df = data["variance"]
-        st.subheader("Budget vs Actual Variance")
+# ── EVM Metrics ────────────────────────────────────────────────────
 
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Over Budget Count", len(var_df[var_df["over_budget"]]))
-        col_b.metric("Avg Variance %", f"{var_df['variance_pct'].mean():.1f}%")
-        col_c.metric("Total Variance", f"${var_df['variance'].sum()/1e6:.1f}M")
+st.subheader("EVM Metrics")
 
-        # Variance by agency
-        fig = px.box(var_df, x="awarding_sub_agency", y="variance_pct",
-                     title="Variance % by Agency")
-        st.plotly_chart(fig, use_container_width=True)
+ev_tab1, ev_tab2 = st.tabs(["CPI / SPI Scatter", "EAC vs BAC"])
 
+with ev_tab1:
+    evm_df = pd.DataFrame(data["evm"])
+    if not evm_df.empty:
+        # Filter to visible grants
+        visible_ids = {g.get("Award ID") for g in filtered_grants}
+        evm_filtered_df = evm_df[evm_df["award_id"].isin(visible_ids)] if "award_id" in evm_df.columns else evm_df
+        
+        if not evm_filtered_df.empty:
+            chart_data = pd.DataFrame({
+                "CPI": evm_filtered_df["CPI"],
+                "SPI": evm_filtered_df["SPI"],
+            })
+            st.scatter_chart(chart_data)
+            
+            col_e1, col_e2 = st.columns(2)
+            with col_e1:
+                st.metric("Healthy (CPI ≥ 0.95)", sum(1 for c in evm_filtered_df["CPI"] if c >= 0.95))
+            with col_e2:
+                st.metric("At Risk (CPI < 0.95)", sum(1 for c in evm_filtered_df["CPI"] if c < 0.95))
+
+with ev_tab2:
+    if not evm_df.empty:
+        eac_data = pd.DataFrame({
+            "Project": evm_df["award_id"].str[:12] if "award_id" in evm_df.columns else range(len(evm_df)),
+            "BAC": evm_df["BAC"],
+            "EAC": evm_df["EAC"],
+        })
+        st.bar_chart(eac_data.set_index("Project"))
+
+st.divider()
+
+# ── Variance Report ────────────────────────────────────────────────
+
+st.subheader("Variance Report")
+
+var_df = pd.DataFrame(data["variance"])
+if not var_df.empty:
+    # Filter to visible grants
+    visible_ids = {g.get("Award ID") for g in filtered_grants}
+    var_filtered = var_df[var_df["award_id"].isin(visible_ids)] if "award_id" in var_df.columns else var_df
+    
+    if not var_filtered.empty:
+        # Status distribution
+        status_counts = var_filtered["status"].value_counts()
+        st.bar_chart(status_counts)
+        
         # Budget burn-down
-        var_sorted = var_df.sort_values("project_progress_pct")
-        fig2 = px.scatter(var_sorted, x="project_progress_pct", y="variance_pct",
-                          color="over_budget", size="budget",
-                          title="Variance vs Project Progress")
-        st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("Run `python src/variance_reporter.py` to generate variance data.")
+        burn_data = var_filtered[["award_id", "budget_burned_pct"]].rename(columns={"award_id": "Project", "budget_burned_pct": "Budget Burned %"})
+        if not burn_data.empty:
+            st.bar_chart(burn_data.set_index("Project").head(20))
+        
+        # Detailed table
+        st.dataframe(
+            var_filtered[["award_id", "recipient", "BAC", "AC", "CV", "SV", "status"]].head(50),
+            use_container_width=True
+        )
 
-with tab4:
-    if "usaspending" in data:
-        df = data["usaspending"]
-        st.subheader("Agency Analysis")
+st.divider()
 
-        agency_summary = df.groupby("awarding_sub_agency").agg({
-            "amount": ["sum", "mean", "count"]
-        }).reset_index()
-        agency_summary.columns = ["agency", "total", "average", "count"]
-        st.dataframe(agency_summary, use_container_width=True)
+# ── Schedule Timeline ──────────────────────────────────────────────
 
-        fig = px.pie(agency_summary, values="total", names="agency",
-                     title="Total Obligations by Agency")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Load USASpending data first.")
+st.subheader("Schedule Timeline (Simplified)")
 
-st.markdown("---")
-st.markdown("*Dashboard built with real data from USASpending.gov, FTA NTD, and WMATA public sources.*")
+grant_df = pd.DataFrame(filtered_grants)
+if not grant_df.empty and "Start Date" in grant_df.columns and "End Date" in grant_df.columns:
+    # Parse dates and create timeline data
+    timeline_rows = []
+    for _, g in grant_df.iterrows():
+        start = g.get("Start Date")
+        end = g.get("End Date")
+        if start and end:
+            try:
+                s = pd.to_datetime(start, errors="coerce")
+                e = pd.to_datetime(end, errors="coerce")
+                if pd.notna(s) and pd.notna(e):
+                    timeline_rows.append({
+                        "Project": str(g.get("Award ID", "Unknown"))[:20],
+                        "Start": s,
+                        "End": e,
+                        "Duration (days)": (e - s).days,
+                    })
+            except Exception:
+                pass
+    
+    if timeline_rows:
+        timeline_df = pd.DataFrame(timeline_rows).sort_values("Start")
+        st.dataframe(timeline_df.head(30), use_container_width=True)
+        
+        # Duration distribution
+        duration_chart = timeline_df.set_index("Project")["Duration (days)"].head(20)
+        st.bar_chart(duration_chart)
+
+st.divider()
+
+# ── Footer ───────────────────────────────────────────────────────
+
+st.caption("""
+**Data Sources:** USASpending.gov API v2 | FTA National Transit Database | WMATA Open Data Hub
+**Coverage:** Federal transit grants (CFDA 20.500, 20.507, 20.525, 20.526, 20.521), 2019–2025
+**Last Updated:** {now}
+""".format(now=datetime.now().strftime("%Y-%m-%d %H:%M")))
