@@ -8,78 +8,110 @@
 
 ## Overview
 
-Production-grade analytics demonstrating federal spend monitoring, contract lifecycle optimization, and procurement market analysis using real US government spending data.
+Production-grade analytics demonstrating capital portfolio governance and executive decision support for federal transit investments and municipal strategic planning, using real US government spending, labor, demographic, and transit data.
 
 ## Projects
 
-### 1. Federal Spend Analytics
-**Notebook**: `projects/federal-spend/notebooks/01_federal_spend.ipynb`  
-**Data**: USASpending.gov FY2024 — Top 20 agency obligations  
-**Source**: https://www.usaspending.gov/  
-**Records**: 20 agencies × 4 metrics  
-**Analysis**: Obligation trends, contract/grant distribution, small business utilization
-
-### 2. Contract Lifecycle Analysis
-**Notebook**: `projects/contract-lifecycle/notebooks/01_contract_lifecycle.ipynb`  
-**Data**: FPDS Pattern Analysis FY2024  
-**Source**: https://www.fpds.gov/  
-**Records**: 10 major NAICS codes  
-**Analysis**: Duration, modification/termination risk, vendor scoring
-
-### 3. Procurement Market Analysis
-**Notebook**: `projects/procurement-market/notebooks/01_procurement_market.ipynb`  
-**Data**: SAM.gov Vendor Diversity FY2024  
-**Source**: https://sam.gov/  
-**Records**: 10 business categories  
-**Analysis**: Diversity landscape, win rate vs size, market share
-
-### 4. Federal Awards Deep Dive *(NEW — Transaction-Level)*
-**Notebook**: `projects/federal-awards/notebooks/02_federal_awards_deep_dive.ipynb`  
-**Data**: USASpending.gov API v2 — Awards endpoint  
+### 1. Capital Portfolio Governance
+**Path**: `projects/capital-portfolio-governance/`  
+**Dashboard**: `dashboard.py` (Streamlit)  
+**Data**: USASpending.gov FY2019–2025 — 100 federal transit grants  
 **Source**: https://api.usaspending.gov/api/v2/search/spending_by_award/  
-**Records**: 100 largest federal contracts with actual award IDs  
-**Analysis**: Agency concentration, value distribution, top contractors
+**Records**: 100 grants, $77.7B total portfolio value  
+**Analysis**: Earned Value Management (CPI, SPI, EAC, VAC), budget variance reporting, portfolio health scoring, agency breakdown
 
-**Featured Contracts**:
-| Award ID | Recipient | Value | Agency |
-|----------|-----------|-------|--------|
-| HT940216C0001 | HUMANA GOVERNMENT BUSINESS INC | $51.3B | DoD |
-| DEAC0494AL85000 | LOCKHEED MARTIN CORP | $48.1B | DoE |
-| DENA0003525 | SANDIA NATIONAL LABS | $42.1B | DoE |
-| DEAC0500OR22725 | UT-BATTELLE LLC (Oak Ridge) | $41.4B | DoE |
+**Additional Data Sources**:
+- **FTA National Transit Database (NTD)**: https://www.transit.dot.gov/ntd
+- **WMATA Open Data**: https://www.wmata.com/initiatives/open-data-hub/ — 97 rail stations, 6 lines
+
+**Key Files**:
+- `src/download_usaspending.py` — USASpending.gov API client
+- `src/download_wmata.py` — WMATA Open Data fetcher
+- `src/evm_calculator.py` — Earned Value Management metrics
+- `src/variance_reporter.py` — Budget vs. actual variance analysis
+- `src/portfolio_summary.py` — Aggregate KPIs and portfolio health
+
+---
+
+### 2. Executive Decision Support Tools
+**Path**: `projects/executive-decision-support/`  
+**Dashboard**: `dashboard.py` (Streamlit)  
+**Data**: DC Open Data, US Census ACS, Bureau of Labor Statistics  
+**Sources**:
+- DC Open Data: https://opendata.dc.gov
+- Census ACS API: https://api.census.gov/data/2022/acs/acs5
+- BLS API: https://api.bls.gov/publicAPI/v2/timeseries/data/
+
+**Analysis**: Scenario modeling (what-if budget reallocation), ROI & NPV analysis, auto-generated executive briefings, agency performance monitoring
+
+**Key Files**:
+- `src/download_dc_metrics.py` — DC Open Data API client
+- `src/download_census_exec.py` — Census ACS API client
+- `src/download_bls_exec.py` — BLS API client
+- `src/scenario_engine.py` — Budget scenario modeling
+- `src/roi_calculator.py` — ROI / NPV / payback calculator
+- `src/briefing_generator.py` — Executive briefing memo generator
+
+---
+
+### 3. Multi-Workstream Program Tracker
+**Path**: `projects/multi-workstream-program-tracker/`  
+**Status**: 🔧 In development — directory structure pending  
+
+Planned PMO tool for mapping dependencies, resources, and milestones across 4–6 parallel workstreams, with proactive risk management and resource reallocation. Inspired by multi-workstream delivery models across engineering, finance, operations, and executive leadership.
+
+**Planned Techniques**:
+- NetworkX dependency graph analysis
+- Resource leveling and critical path method (CPM)
+- Risk heatmapping with Monte Carlo simulation
+- Automated status rollup and escalation triggers
 
 ---
 
 ## Data Philosophy
 
-All datasets are **real federal procurement data** from official government sources. No synthetic generators. Every analysis cites the original data source with URL.
+All active datasets are **real federal and municipal data** from official government sources. No synthetic generators. Every analysis cites the original data source with URL.
 
-| Source | Type | Records |
+| Source | Type | Used By |
 |--------|------|---------|
-| USASpending.gov | Agency obligations | 20 agencies × 4 metrics |
-| FPDS | Contract patterns | 10 NAICS × 5 metrics |
-| SAM.gov | Vendor diversity | 10 categories × 5 metrics |
-| USASpending API | Individual awards | 100 contracts with real award IDs |
+| USASpending.gov | Federal transit grants | Capital Portfolio Governance |
+| FTA NTD | Transit capital expenses | Capital Portfolio Governance |
+| WMATA Open Data | Rail stations & lines | Capital Portfolio Governance |
+| Census ACS | DC demographics & economics | Executive Decision Support |
+| BLS | DC employment & wages | Executive Decision Support |
+| DC Open Data | Agency performance metrics | Executive Decision Support |
 
 ---
 
 ## Skills Demonstrated
 
+- **Capital portfolio governance** — EVM metrics, variance analysis, portfolio health scoring
 - **Federal spending analysis** — USASpending API integration
-- **Contract risk modeling** — FPDS lifecycle analytics
-- **Supplier diversity** — SAM.gov vendor benchmarking
-- **Procurement strategy** — Market concentration and opportunity sizing
-- **Transaction-level analysis** — Individual award tracking
-- **Data visualization** — Matplotlib/Seaborn embedded charts
+- **Municipal data analytics** — Census ACS, BLS, and Open Data portal integration
+- **Executive decision support** — Scenario modeling, ROI/NPV analysis, auto-generated briefings
+- **Program management** — Workstream tracking, dependency mapping, risk heatmapping (planned)
+- **Data visualization** — Streamlit interactive dashboards
 
-## Running the Notebooks
+## Running the Projects
 
+### Capital Portfolio Governance
 ```bash
-pip install pandas numpy matplotlib
-python projects/federal-spend/notebooks/01_federal_spend.ipynb
+cd projects/capital-portfolio-governance
+pip install -r requirements.txt
+python src/download_usaspending.py
+python src/evm_calculator.py
+streamlit run dashboard.py
 ```
 
-Notebooks include pre-computed outputs with embedded charts. Re-execution requires the `../data/` CSV files.
+### Executive Decision Support
+```bash
+cd projects/executive-decision-support
+pip install -r requirements.txt
+python src/download_dc_metrics.py
+python src/download_census_exec.py
+python src/download_bls_exec.py
+streamlit run dashboard.py
+```
 
 ---
 
