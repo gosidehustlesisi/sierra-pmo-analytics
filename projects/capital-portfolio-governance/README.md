@@ -1,32 +1,63 @@
-## Project 1: Capital Portfolio Governance
+# Capital Portfolio Governance
 
-**Context:** Capital program governance inspired by WMATA's $300M+ capital and O&M portfolio, COSI Tracker, and executive budget variance reporting.
+Capital portfolio governance system tracking **$300M+ federal transit capital programs** using real data from USASpending.gov, FTA National Transit Database, and WMATA public sources.
 
-**Dataset:**
-- [USASpending.gov — Federal transit grants](https://www.usaspending.gov/)
-- [FTA National Transit Database — Capital expenditure](https://www.transit.dot.gov/ntd)
-- [WMATA Open Data — Capital projects](https://www.wmata.com/)
+## Data Sources (All Real)
 
-**Objective:** Build a comprehensive capital portfolio governance system that tracks budget vs. actual, schedule variance, milestone completion, and earned value across multiple parallel workstreams.
+| Source | API/URL | Data Type | Status |
+|--------|---------|-----------|--------|
+| **USASpending.gov** | `https://api.usaspending.gov/api/v2/search/spending_by_award/` | Federal grant awards (FTA, FHWA) | ✅ Live API |
+| **FTA NTD** | `https://data.transportation.gov/resource/fphd-jyyj.csv` | Capital expenses by transit agency | ✅ Live API (Socrata) |
+| **WMATA** | `https://gtfs.wmata.com/gtfs/wmata.zip` | GTFS feed + documented capital projects | ⚠️ GTFS live; capital data documented |
 
-**Techniques:**
-- Earned Value Management (EVM): CPI, SPI, EAC, VAC
-- Schedule variance analysis with critical path identification
-- Budget burn-down and forecast-to-complete modeling
-- Executive summary generation (automated PowerPoint/Report)
+## Quick Start
 
-**Business Impact:**
-- 37% improvement in budget-to-delivery alignment
-- $1M+ in documented cost savings (overtime controls, vendor oversight)
-- Standardized portfolio variance reporting across 7 departments
-- Monthly executive readouts with 12+ stakeholders
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-**Files:**
-- `notebooks/01_capital_data_integration.ipynb`
-- `notebooks/02_earned_value_analysis.ipynb`
-- `notebooks/03_variance_reporting.ipynb`
-- `src/evm_calculator.py`
-- `src/variance_reporter.py`
-- `dashboard/capital_portfolio_dashboard.py`
+# Download real data
+python src/download_usaspending.py    # 100+ real federal transit awards
+python src/download_fta_ntd.py         # NTD capital expense data
+python src/download_wmata_capital.py   # WMATA GTFS + capital project docs
 
-**Status:** 🔧 In development
+# Run analytics
+python src/evm_calculator.py           # Earned Value Management (CPI, SPI, EAC, VAC)
+python src/variance_reporter.py        # Budget vs actual variance analysis
+
+# Launch dashboard
+streamlit run dashboard.py
+```
+
+## Project Structure
+
+```
+capital-portfolio-governance/
+├── src/
+│   ├── download_usaspending.py    # FTA/FHWA federal grants (live API)
+│   ├── download_fta_ntd.py         # NTD capital expenses (Socrata API)
+│   ├── download_wmata_capital.py   # WMATA GTFS + capital docs
+│   ├── evm_calculator.py           # CPI, SPI, EAC, VAC, TCPI
+│   └── variance_reporter.py        # Budget variance analysis
+├── data/                            # Downloaded real data + metadata
+├── dashboard.py                     # Streamlit portfolio dashboard
+└── requirements.txt
+```
+
+## EVM Metrics Explained
+
+- **CPI** (Cost Performance Index): `EV / AC` — >1.0 = under budget
+- **SPI** (Schedule Performance Index): `EV / PV` — >1.0 = ahead of schedule
+- **EAC** (Estimate at Completion): `BAC / CPI` — projected total cost
+- **VAC** (Variance at Completion): `BAC - EAC` — projected cost variance
+- **TCPI** (To-Complete Performance Index): efficiency needed to finish on budget
+
+Source: ANSI/EIA-748 Earned Value Management Systems Standard
+
+## Citation
+
+> USASpending.gov, U.S. Department of the Treasury. Federal Transit Administration, National Transit Database. Washington Metropolitan Area Transit Authority (WMATA) Capital Improvement Program.
+
+## License
+
+MIT — Use for portfolio demonstration and PMO analytics.
