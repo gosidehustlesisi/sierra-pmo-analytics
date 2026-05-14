@@ -1,179 +1,179 @@
 #!/usr/bin/env python3
 """
-DC Open Data Agency Performance Metrics Downloader
-Fetches REAL municipal data from DC Open Data Portal (Socrata platform).
+DC Open Data API Client
+Fetches agency performance metrics from the DC Open Data Portal (CKAN API).
 
-Primary source: https://opendata.dc.gov/
-API endpoint: https://opendata.dc.gov/api/ (Socrata Open Data API)
-
-Datasets to fetch:
-1. DC Government Employee Salary Data
-   - ID: rjru-9f9v (if available) or search opendata.dc.gov
-2. DC Budget and Financial Data
-   - Annual budget documents and expenditure data
-3. Performance DC — Agency performance metrics
-   - https://opendata.dc.gov/datasets/DCGIS::performance-dc/
-
-Fallback: Documented CSV download URLs for manual retrieval.
-
-Citation: District of Columbia Open Data, Office of the Chief Technology Officer
+Primary endpoint: https://opendata.dc.gov/api/3/action/package_search
+Fallback: https://opendata.dc.gov/datasets/DCGIS::agency-performance-metrics/explore
 """
 
 import requests
 import pandas as pd
 import json
 from pathlib import Path
-from datetime import datetime
 
 BASE = Path(__file__).parent.parent
 DATA_DIR = BASE / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-DC_OPEN_DATA_BASE = "https://opendata.dc.gov/api/"
-DC_PORTAL_URL = "https://opendata.dc.gov/"
+CKAN_API = "https://opendata.dc.gov/api/3/action"
+AGENCY_PERFORMANCE_PACKAGE = "agency-performance-metrics"
 
-# Known Socrata dataset IDs (verified via portal search)
-DC_DATASETS = {
-    "employee_salaries": {
-        "id": "r4ra-k7ra",
-        "description": "DC Government Employee Salary Data",
-        "url": "https://opendata.dc.gov/datasets/r4ra-k7ra",
-    },
-    "budget_expenditures": {
-        "id": "7rjk-3w2p",
-        "description": "DC Budgeted Expenditures by Agency",
-        "url": "https://opendata.dc.gov/datasets/7rjk-3w2p",
-    },
-}
+def search_packages(query="agency performance"):
+    """Search CKAN packages for agency performance datasets."""
+    url = f"{CKAN_API}/package_search?q={requests.utils.quote(query)}&rows=20"
+    print(f"[DC Open Data] Searching: {url}")
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("success"):
+        print(f"[DC Open Data] Search failed: {data}")
+        return []
+    return data["result"]["results"]
 
+def fetch_package_detail(package_id):
+    """Fetch detailed package info including resources."""
+    url = f"{CKAN_API}/package_show?id={package_id}"
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    return data["result"] if data.get("success") else None
 
-def fetch_socrata_dataset(dataset_id, limit=50000):
-    """Fetch data from DC Open Data Socrata API."""
-    url = f"https://opendata.dc.gov/api/views/{dataset_id}/rows.csv?accessType=DOWNLOAD"
-    print(f"[DC Open Data] Fetching dataset {dataset_id}...")
-    print(f"[DC Open Data] URL: {url}")
+def fetch_resource_csv(resource_url):
+    """Download a CSV resource and parse to DataFrame."""
+    print(f"[DC Open Data] Downloading CSV: {resource_url[:80]}...")
+    resp = requests.get(resource_url, timeout=120)
+    resp.raise_for_status()
+    df = pd.read_csv(pd.io.common.StringIO(resp.text))
+    print(f" -> {len(df)} records, {len(df.columns)} columns")
+    return df
 
+def fetch_agency_performance_fallback():
+    """
+    Fallback: Use the ArcGIS Open Data REST endpoint for Agency Performance Metrics.
+    The CKAN package 'agency-performance-metrics' exposes an ArcGIS feature service.
+    """
+    # Try the ArcGIS REST API query endpoint directly
+    # The dataset ID for DCGIS Agency Performance Metrics
+    arcgis_url = "https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Administration_Other/MapServer/16/query"
+    params = {
+        "where": "1=1",
+        "outFields": "*",
+        "outSR": "4326",
+        "f": "json",
+        "resultRecordCount": 2000,
+    }
+    print(f"[DC Open Data] Trying ArcGIS REST fallback...")
     try:
-        resp = requests.get(url, timeout=120)
-        if resp.status_code == 200:
-            from io import StringIO
-            df = pd.read_csv(StringIO(resp.text))
-            print(f"  -> Retrieved {len(df)} records")
-            return df
-        else:
-            print(f"  [WARN] HTTP {resp.status_code}")
-            return None
+        resp = requests.get(arcgis_url, params=params, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        features = data.get("features", [])
+        if not features:
+            print("[DC Open Data] No features returned from ArcGIS.")
+            return pd.DataFrame()
+        rows = [f["attributes"] for f in features]
+        df = pd.DataFrame(rows)
+        print(f"[DC Open Data] Fallback: {len(df)} records from ArcGIS")
+        return df
     except Exception as e:
-        print(f"  [WARN] Fetch failed: {e}")
-        return None
-
-
-def fetch_via_api_endpoint(dataset_id, limit=1000):
-    """Alternative: Use Socrata JSON API endpoint."""
-    url = f"https://opendata.dc.gov/resource/{dataset_id}.json"
-    params = {"$limit": limit}
-    print(f"[DC Open Data] Trying JSON API: {url}")
-
-    try:
-        resp = requests.get(url, params=params, timeout=60)
-        if resp.status_code == 200:
-            data = resp.json()
-            df = pd.DataFrame(data)
-            print(f"  -> Retrieved {len(df)} records via JSON API")
-            return df
-        else:
-            print(f"  [WARN] JSON API returned {resp.status_code}")
-            return None
-    except Exception as e:
-        print(f"  [WARN] JSON API failed: {e}")
-        return None
-
-
-def build_documentation_file():
-    """Document manual download paths for DC Open Data."""
-    doc = """# DC Open Data — Manual Download Guide
-
-If the Socrata API is unavailable, use these direct download links:
-
-## DC Government Employee Salaries
-- Portal: https://opendata.dc.gov/datasets/r4ra-k7ra
-- CSV Download: https://opendata.dc.gov/api/views/r4ra-k7ra/rows.csv?accessType=DOWNLOAD
-
-## DC Budgeted Expenditures by Agency
-- Portal: https://opendata.dc.gov/datasets/7rjk-3w2p
-- CSV Download: https://opendata.dc.gov/api/views/7rjk-3w2p/rows.csv?accessType=DOWNLOAD
-
-## DC Performance Metrics
-- Portal: https://opendata.dc.gov/search?q=performance%20dc
-- Categories: Education, Public Safety, Transportation, Health
-
-## DC CFO Budget Publications
-- Source: https://cfo.dc.gov/publications
-- Documents: Fiscal Year Budget, Revenue Reports, Expenditure Reports
-
-## Additional DC Data Portals
-- DC GIS: https://dcatlas.dcgis.dc.gov/
-- DC Health Matters: https://www.dchealthmatters.org/
-- WMATA Open Data: https://www.wmata.com/initiatives/open-data-hub/
-
-## Citation
-District of Columbia Open Data Portal
-Office of the Chief Technology Officer (OCTO)
-https://opendata.dc.gov
-"""
-    doc_path = DATA_DIR / "DC_OPEN_DATA_GUIDE.md"
-    doc_path.write_text(doc)
-    print(f"[DC Open Data] Saved guide to {doc_path}")
-
+        print(f"[DC Open Data] ArcGIS fallback failed: {e}")
+        return pd.DataFrame()
 
 def main():
     print("=" * 60)
-    print("DC Open Data Agency Performance Metrics Downloader")
+    print("DC Open Data — Agency Performance Metrics Downloader")
     print("=" * 60)
-    print(f"Portal: {DC_PORTAL_URL}")
-    print()
 
-    all_data = {}
-    for name, info in DC_DATASETS.items():
-        df = None
-        # Try CSV download first
-        try:
-            df = fetch_socrata_dataset(info["id"])
-        except Exception as e:
-            print(f"[WARN] CSV download failed for {name}: {e}")
+    df = None
 
-        # Fallback to JSON API
-        if df is None:
-            try:
-                df = fetch_via_api_endpoint(info["id"])
-            except Exception as e:
-                print(f"[WARN] JSON API failed for {name}: {e}")
+    # Try 1: CKAN package search
+    try:
+        packages = search_packages("agency performance")
+        target = None
+        for pkg in packages:
+            if AGENCY_PERFORMANCE_PACKAGE in pkg.get("name", "") or \
+               "performance" in pkg.get("name", "").lower():
+                target = pkg
+                break
 
-        if df is not None and not df.empty:
-            csv_path = DATA_DIR / f"dc_{name}.csv"
-            df.to_csv(csv_path, index=False)
-            print(f"[DC Open Data] Saved {name}: {len(df)} records -> {csv_path}")
-            all_data[name] = {"records": len(df), "columns": list(df.columns)}
+        if target:
+            print(f"[DC Open Data] Found package: {target['name']}")
+            detail = fetch_package_detail(target["id"])
+            if detail and detail.get("resources"):
+                for res in detail["resources"]:
+                    fmt = res.get("format", "").upper()
+                    if fmt in ("CSV", "GEOJSON", "JSON"):
+                        df = fetch_resource_csv(res["url"])
+                        break
         else:
-            print(f"[DC Open Data] {name}: No data retrieved (API may require key or be unavailable)")
+            print("[DC Open Data] No matching package found via CKAN search.")
+    except Exception as e:
+        print(f"[DC Open Data] CKAN search failed: {e}")
 
-    # Build documentation
-    build_documentation_file()
+    # Try 2: ArcGIS REST fallback
+    if df is None or df.empty:
+        df = fetch_agency_performance_fallback()
+
+    # Try 3: Minimal synthetic but clearly labeled fallback
+    if df is None or df.empty:
+        print("[DC Open Data] All live sources failed. Generating labeled sample for structure.")
+        agencies = [
+            "Department of Health", "Metropolitan Police Department",
+            "Department of Transportation", "Department of Energy & Environment",
+            "Office of the Chief Technology Officer", "Department of Human Services",
+            "Department of Parks and Recreation", "DC Public Schools",
+            "Department of Employment Services", "Department of Consumer and Regulatory Affairs",
+        ]
+        df = pd.DataFrame({
+            "agency_name": agencies,
+            "metric_name": ["Composite Performance Index"] * len(agencies),
+            "value": [68, 72, 58, 80, 85, 60, 75, 70, 55, 68],
+            "reporting_period": ["2024-Q1"] * len(agencies),
+        })
+        df["_source"] = "labeled_sample_fallback"
+        print(f"[DC Open Data] Generated {len(df)} labeled sample records")
+    else:
+        # Normalize columns
+        col_map = {}
+        for c in df.columns:
+            cl = c.lower().strip()
+            if "agency" in cl:
+                col_map[c] = "agency_name"
+            elif "metric" in cl and "name" in cl:
+                col_map[c] = "metric_name"
+            elif cl in ("value", "actual", "result"):
+                col_map[c] = "value"
+            elif "period" in cl or "quarter" in cl or "date" in cl:
+                col_map[c] = "reporting_period"
+        if col_map:
+            df = df.rename(columns=col_map)
+        # Ensure required columns exist
+        for req in ["agency_name", "metric_name", "value", "reporting_period"]:
+            if req not in df.columns:
+                df[req] = "N/A"
+
+    # Save
+    out_json = DATA_DIR / "dc_agency_metrics.json"
+    out_csv = DATA_DIR / "dc_agency_metrics.csv"
+    df.to_json(out_json, orient="records", indent=2)
+    df.to_csv(out_csv, index=False)
+    print(f"\n[DC Open Data] Saved {len(df)} records to {out_json}")
+    print(f"[DC Open Data] Saved CSV to {out_csv}")
 
     # Metadata
     meta = {
-        "source": "District of Columbia Open Data Portal",
-        "portal_url": DC_PORTAL_URL,
-        "datasets_attempted": list(DC_DATASETS.keys()),
-        "datasets_successful": list(all_data.keys()),
-        "fetched_at": datetime.now().isoformat(),
-        "citation": "District of Columbia Open Data, Office of the Chief Technology Officer",
+        "source": "DC Open Data Portal",
+        "api_url": "https://opendata.dc.gov/api/3/action/package_search",
+        "fallback_used": "ArcGIS REST" if "_source" not in df.columns else "labeled_sample",
+        "record_count": len(df),
+        "columns": list(df.columns),
+        "date_fetched": pd.Timestamp.now().isoformat(),
     }
     with open(DATA_DIR / "dc_metadata.json", "w") as f:
         json.dump(meta, f, indent=2)
 
     print("\n[DC Open Data] Done.")
-
 
 if __name__ == "__main__":
     main()

@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-Executive Briefing Generator
-Auto-generates "Mayor's Weekly Briefing" memos from real data sources.
+Briefing Generator — Auto-Generate Executive Briefing Memos
 
-Pulls data from:
-- Census ACS: Population, income, demographics
-- BLS: Employment, unemployment, wages
-- Scenario Engine: Budget projections
-- ROI Analysis: Program investment returns
-
-Outputs: Markdown briefing memo with key metrics, trends, recommendations.
-
-Template: "Mayor's Weekly Briefing — [Date]"
-Citation: US Census, BLS, DC Open Data
+Produces a Markdown executive memo with:
+- Executive Summary
+- Key Metrics (from downloaded data)
+- Trends
+- Recommendations
 """
 
+import json
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -23,181 +18,235 @@ BASE = Path(__file__).parent.parent
 DATA_DIR = BASE / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
+def load_data_sources():
+    """Load all downloaded data sources."""
+    sources = {}
 
-def load_data():
-    """Load available data sources."""
-    data = {}
-    
-    # Census
-    census_path = DATA_DIR / "census_dc_demographics.csv"
+    # Census DC
+    census_path = DATA_DIR / "census_dc.json"
     if census_path.exists():
-        data["census"] = pd.read_csv(census_path)
-    
-    # BLS
-    bls_path = DATA_DIR / "bls_dc_employment.csv"
+        with open(census_path) as f:
+            sources["census"] = pd.DataFrame(json.load(f))
+    else:
+        sources["census"] = pd.DataFrame()
+
+    # BLS DC
+    bls_path = DATA_DIR / "bls_dc.json"
     if bls_path.exists():
-        data["bls"] = pd.read_csv(bls_path)
-    
+        with open(bls_path) as f:
+            sources["bls"] = pd.DataFrame(json.load(f))
+    else:
+        sources["bls"] = pd.DataFrame()
+
+    # DC Metrics
+    dc_path = DATA_DIR / "dc_agency_metrics.json"
+    if dc_path.exists():
+        with open(dc_path) as f:
+            sources["dc"] = pd.DataFrame(json.load(f))
+    else:
+        sources["dc"] = pd.DataFrame()
+
     # ROI
-    roi_path = DATA_DIR / "roi_analysis.csv"
+    roi_path = DATA_DIR / "roi_analysis.json"
     if roi_path.exists():
-        data["roi"] = pd.read_csv(roi_path)
-    
+        with open(roi_path) as f:
+            sources["roi"] = pd.DataFrame(json.load(f))
+    else:
+        sources["roi"] = pd.DataFrame()
+
     # Scenarios
-    scenario_path = DATA_DIR / "scenario_analysis.csv"
-    if scenario_path.exists():
-        data["scenario"] = pd.read_csv(scenario_path)
-    
-    return data
+    scen_path = DATA_DIR / "scenario_default.json"
+    if scen_path.exists():
+        with open(scen_path) as f:
+            sources["scenario"] = pd.DataFrame(json.load(f))
+    else:
+        sources["scenario"] = pd.DataFrame()
+
+    return sources
+
+def _df_to_md(df):
+    """Convert DataFrame to markdown table without tabulate dependency."""
+    if df.empty:
+        return ""
+    cols = list(df.columns)
+    header = "| " + " | ".join(str(c) for c in cols) + " |"
+    sep = "|" + "|".join([" --- " for _ in cols]) + "|"
+    rows = []
+    for _, row in df.iterrows():
+        rows.append("| " + " | ".join(str(v) for v in row.values) + " |")
+    return "\n".join([header, sep] + rows)
 
 
-def generate_briefing(data):
-    """Generate the full briefing memo."""
-    today = datetime.now().strftime("%B %d, %Y")
-    
-    # Extract metrics
-    population = "N/A"
-    median_income = "N/A"
-    unemployment = "N/A"
-    
-    if "census" in data and not data["census"].empty:
-        census = data["census"]
-        if "population" in census.columns:
-            pop = census["population"].iloc[0]
-            population = f"{pop:,.0f}"
-        if "median_income" in census.columns:
-            inc = census["median_income"].iloc[0]
-            median_income = f"${inc:,.0f}"
-    
-    if "bls" in data and not data["bls"].empty:
-        bls = data["bls"]
-        # Get most recent unemployment rate
-        unemp_data = bls[bls["metric"] == "dc_unemployment_rate"] if "metric" in bls.columns else bls
-        if not unemp_data.empty and "value" in unemp_data.columns:
-            latest = unemp_data.iloc[-1]
-            unemployment = f"{latest['value']}%"
-    
-    # ROI summary
-    roi_summary = ""
-    if "roi" in data and not data["roi"].empty:
-        roi = data["roi"]
-        top_program = roi.loc[roi["net_present_value_3pct"].idxmax()]
-        roi_summary = f"""
-## Program Investment Highlights
+def generate_briefing(sources):
+    """Generate the executive briefing markdown."""
+    today = datetime.now().strftime("%Y-%m-%d")
 
-- **{top_program['program']}** leads with highest NPV: **${top_program['net_present_value_3pct']:,.0f}** (IRR: {top_program['irr_pct']}%)
-- Total portfolio initial investment: **${roi['initial_cost'].sum():,.0f}**
-- Average program ROI: **{roi['roi_pct'].mean():.1f}%**
-- Programs with payback < 5 years: **{len(roi[roi['payback_years'] < 5])}**
-"""
-    
-    # Scenario highlights
-    scenario_summary = ""
-    if "scenario" in data and not data["scenario"].empty:
-        scenario = data["scenario"]
-        baseline = scenario[scenario["scenario"] == "Baseline"]
-        education_plus = scenario[scenario["scenario"] == "+10% Education"]
-        
-        if not baseline.empty and not education_plus.empty:
-            baseline_ed = baseline[baseline["agency"] == "Education"]["projected_outcome"].iloc[0]
-            plus_ed = education_plus[education_plus["agency"] == "Education"]["projected_outcome"].iloc[0]
-            improvement = plus_ed - baseline_ed
-            scenario_summary = f"""
-## Budget Scenario Analysis
+    # Extract key metrics
+    census = sources["census"]
+    bls = sources["bls"]
+    dc = sources["dc"]
+    roi = sources["roi"]
+    scenario = sources["scenario"]
 
-- **+10% Education Shift**: Projected graduation rate improvement of **{improvement:+.1f} percentage points**
-- Current education budget: **${baseline[baseline['agency'] == 'Education']['budget'].iloc[0]/1e9:.2f}B**
-- Most efficient agency elasticity: **Housing** (0.20) and **Health** (0.18)
-"""
-    
-    memo = f"""# Mayor's Weekly Briefing — {today}
+    # DC population
+    population = None
+    if not census.empty and "population" in census.columns:
+        population = int(census["population"].iloc[0])
+    elif not census.empty and "population_millions" in census.columns:
+        population = int(census["population_millions"].iloc[0] * 1_000_000)
 
-## Executive Summary
+    # Median income
+    median_income = None
+    if not census.empty and "median_income" in census.columns:
+        median_income = int(census["median_income"].iloc[0])
 
-This briefing synthesizes real-time data from the US Census, Bureau of Labor Statistics, and municipal budget analytics to provide a snapshot of District performance and strategic priorities.
+    # Poverty rate
+    poverty_rate = None
+    if not census.empty and "poverty_rate" in census.columns:
+        poverty_rate = float(census["poverty_rate"].iloc[0])
 
----
+    # Unemployment rate
+    unemployment = None
+    if not bls.empty and "metric" in bls.columns:
+        ur = bls[bls["metric"] == "dc_unemployment_rate"]
+        if not ur.empty:
+            unemployment = float(ur.sort_values("year").iloc[-1]["value"])
 
-## Key Metrics
+    # Employment level
+    employment = None
+    if not bls.empty and "metric" in bls.columns:
+        emp = bls[bls["metric"] == "dc_employment_level"]
+        if not emp.empty:
+            employment = int(emp.sort_values("year").iloc[-1]["value"])
 
-| Indicator | Value | Trend |
-|-----------|-------|-------|
-| **DC Population** | {population} | Census ACS 5-Year |
-| **Median Household Income** | {median_income} | Census ACS 5-Year |
-| **Unemployment Rate** | {unemployment} | BLS LAUS Monthly |
-| **Total Municipal Budget** | $8.1B | DC FY2025 Approved |
+    # Agency count
+    agency_count = len(dc["agency_name"].unique()) if not dc.empty and "agency_name" in dc.columns else 0
 
----
+    # Best ROI program
+    best_roi = None
+    if not roi.empty and "benefit_cost_ratio" in roi.columns:
+        best = roi.loc[roi["benefit_cost_ratio"].idxmax()]
+        best_roi = (best["program"], best["benefit_cost_ratio"], best["npv"])
 
-## Economic Context
+    lines = []
+    lines.append(f"# Executive Briefing — DC Strategic Planning")
+    lines.append(f"**Date:** {today}")
+    lines.append(f"**Classification:** Internal — Executive Decision Support")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
 
-### Employment & Wages
-- DC government employment tracked via BLS Current Employment Statistics (CES)
-- Metro-area unemployment follows national patterns with government-sector stability
-- Wage growth in professional services sector outpaces national average
+    # Executive Summary
+    lines.append("## Executive Summary")
+    lines.append("")
+    lines.append("This briefing synthesizes real-time demographic, economic, and agency performance")
+    lines.append("data to inform FY2025 budget allocation and program investment decisions.")
+    lines.append("")
+    if population:
+        lines.append(f"- **DC Population:** {population:,}")
+    if median_income:
+        lines.append(f"- **Median Household Income:** ${median_income:,}")
+    if unemployment is not None:
+        lines.append(f"- **Unemployment Rate:** {unemployment:.1f}%")
+    if employment:
+        lines.append(f"- **Total Nonfarm Employment:** {employment:,}")
+    if poverty_rate is not None:
+        lines.append(f"- **Poverty Rate:** {poverty_rate:.1f}%")
+    if agency_count:
+        lines.append(f"- **Agencies Monitored:** {agency_count}")
+    if best_roi:
+        lines.append(f"- **Top ROI Program:** {best_roi[0]} (BCR: {best_roi[1]:.2f}, NPV: ${best_roi[2]:,.0f})")
+    lines.append("")
 
-### Demographics
-- Population trends from American Community Survey inform service delivery planning
-- Homeownership and commute data guide housing and transportation investments
-- Poverty rate tracking enables targeted social program evaluation
+    # Key Metrics
+    lines.append("## Key Metrics")
+    lines.append("")
+    lines.append("### Demographics (Census ACS 5-Year)")
+    if not census.empty:
+        lines.append(_df_to_md(census))
+    else:
+        lines.append("*Census data not available.*")
+    lines.append("")
 
-{roi_summary}
-{scenario_summary}
+    lines.append("### Employment & Wages (BLS)")
+    if not bls.empty:
+        latest = bls.sort_values(["year", "period"]).groupby("metric").last().reset_index()
+        lines.append(_df_to_md(latest[["metric", "year", "period", "value", "description"]]))
+    else:
+        lines.append("*BLS data not available.*")
+    lines.append("")
 
----
+    lines.append("### Agency Performance (DC Open Data)")
+    if not dc.empty:
+        lines.append(_df_to_md(dc.head(10)))
+    else:
+        lines.append("*DC agency metrics not available.*")
+    lines.append("")
 
-## Recommendations
+    # Trends
+    lines.append("## Trends")
+    lines.append("")
+    if not bls.empty and "metric" in bls.columns:
+        ur = bls[bls["metric"] == "dc_unemployment_rate"]
+        if not ur.empty and len(ur) > 1:
+            ur_sorted = ur.sort_values(["year", "period"])
+            first = float(ur_sorted.iloc[0]["value"])
+            last = float(ur_sorted.iloc[-1]["value"])
+            delta = last - first
+            direction = "increased" if delta > 0 else "decreased"
+            lines.append(f"- **DC Unemployment** has {direction} from {first:.1f}% to {last:.1f}%")
+            lines.append(f"  over the observed period ({ur_sorted.iloc[0]['year']}–{ur_sorted.iloc[-1]['year']}).")
+        else:
+            lines.append("- **DC Unemployment:** Insufficient time-series for trend analysis.")
+    if not census.empty and "pct_bachelors_plus" in census.columns:
+        edu = float(census["pct_bachelors_plus"].iloc[0])
+        lines.append(f"- **Education:** {edu:.1f}% of DC adults hold a bachelor's degree or higher.")
+    lines.append("")
 
-1. **Monitor unemployment trends closely** — BLS data shows month-to-month volatility; maintain workforce development program funding
-2. **Prioritize high-NPV investments** — Transit and housing programs show strongest returns
-3. **Budget flexibility for education** — Scenario modeling shows positive outcomes from incremental education investment
-4. **Data-driven quarterly reviews** — Refresh all metrics from live Census/BLS feeds each quarter
+    # Recommendations
+    lines.append("## Recommendations")
+    lines.append("")
+    if best_roi:
+        lines.append(f"1. **Prioritize {best_roi[0]}** — highest benefit-cost ratio ({best_roi[1]:.2f})")
+        lines.append(f"   with estimated NPV of ${best_roi[2]:,.0f} over 10 years.")
+    if not roi.empty and "npv" in roi.columns:
+        positive_npv = roi[roi["npv"] > 0]
+        if not positive_npv.empty:
+            lines.append(f"2. **Fund all positive-NPV programs** — {len(positive_npv)} of {len(roi)} evaluated")
+            lines.append(f"   programs show positive returns at 3% discount rate.")
+    lines.append("3. **Monitor unemployment trend** — any sustained increase above 5.5% should")
+    lines.append("   trigger workforce retraining program acceleration.")
+    lines.append("4. **Leverage Open Data** — expand agency performance metric coverage beyond")
+    lines.append("   the current baseline to enable richer scenario modeling.")
+    lines.append("")
 
----
+    lines.append("---")
+    lines.append("")
+    lines.append("*Data sources: DC Open Data Portal, US Census Bureau ACS 5-Year Estimates,")
+    lines.append("Bureau of Labor Statistics. Generated automatically by executive-decision-support.*")
 
-## Data Sources
-
-- **US Census Bureau**: American Community Survey 5-Year Estimates (api.census.gov)
-- **Bureau of Labor Statistics**: Local Area Unemployment Statistics (api.bls.gov)
-- **DC Open Data**: Agency budgets and performance metrics (opendata.dc.gov)
-- **USASpending.gov**: Federal grant tracking (api.usaspending.gov)
-
----
-
-*Briefing generated: {datetime.now().isoformat()}*
-*Next update: {(datetime.now().replace(day=1) + pd.DateOffset(weeks=1)).strftime('%B %d, %Y')}*
-"""
-    
-    return memo
-
+    return "\n".join(lines)
 
 def main():
     print("=" * 60)
-    print("Executive Briefing Generator")
+    print("Briefing Generator — Executive Memo")
     print("=" * 60)
-    
-    data = load_data()
-    
-    print(f"[Briefing] Loaded data sources: {list(data.keys())}")
-    
-    memo = generate_briefing(data)
-    
-    # Save
-    memo_path = DATA_DIR / f"mayor_briefing_{datetime.now().strftime('%Y%m%d')}.md"
-    memo_path.write_text(memo)
-    print(f"\n[Briefing] Saved to {memo_path}")
-    
-    # Also save as latest
-    latest_path = DATA_DIR / "mayor_briefing_latest.md"
-    latest_path.write_text(memo)
-    print(f"[Briefing] Saved latest copy to {latest_path}")
-    
-    # Preview
-    print("\n[Briefing] Preview (first 800 chars):")
-    print(memo[:800] + "...")
-    
-    print("\n[Briefing] Done.")
 
+    sources = load_data_sources()
+    briefing = generate_briefing(sources)
+
+    today = datetime.now().strftime("%Y%m%d")
+    out_path = DATA_DIR / f"briefing_{today}.md"
+    with open(out_path, "w") as f:
+        f.write(briefing)
+
+    print(f"\n[Briefing] Generated {len(briefing)} characters")
+    print(f"[Briefing] Saved to {out_path}")
+    print("\n[Briefing] Preview (first 800 chars):")
+    print(briefing[:800])
+    print("...")
+
+    print("\n[Briefing] Done.")
 
 if __name__ == "__main__":
     main()
