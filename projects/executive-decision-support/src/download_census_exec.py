@@ -49,7 +49,7 @@ def fetch_dc_acs(api_key=""):
     if api_key:
         url += f"&key={api_key}"
     print(f"[Census] Fetching DC ACS data...")
-    print(f"[Census] URL: {url}")
+    print(f"[Census] URL: {url.replace(api_key, '***')}")
 
     try:
         resp = requests.get(url, timeout=60)
