@@ -17,6 +17,11 @@ import requests
 import pandas as pd
 import json
 from pathlib import Path
+import sys
+
+# Load secrets manager from workspace root
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+from secrets_manager import get_secret, require_secret
 
 BASE = Path(__file__).parent.parent
 DATA_DIR = BASE / "data"
@@ -98,10 +103,16 @@ def main():
     print("Census ACS — DC Demographics Downloader")
     print("=" * 60)
     print("[Census] Data source: api.census.gov (ACS 5-Year Estimates)")
-    print("[Census] Get free API key: https://api.census.gov/data/key_signup.html")
     print()
 
-    df = fetch_dc_acs()
+    api_key = get_secret("census_api_key")
+    if not api_key or api_key.startswith("PASTE_"):
+        print("[Census] ⚠️  No Census API key found in sierra-secrets.json")
+        print("[Census] Get one free at: https://api.census.gov/data/key_signup.html")
+        print("[Census] Then add it to: sierra-secrets.json → 'census_api_key'")
+        print()
+
+    df = fetch_dc_acs(api_key=api_key or "")
 
     if df is None:
         print("\n[Census] API requires a free key or is rate-limited.")
