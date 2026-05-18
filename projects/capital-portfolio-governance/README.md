@@ -4,7 +4,6 @@
 
 [![Data Sources](https://img.shields.io/badge/Data-USASpending.gov%20%7C%20FTA%20NTD%20%7C%20Socrata-blue)]()
 [![Records](https://img.shields.io/badge/Records-13,296-green)]()
-[![Portfolio Value](https://img.shields.io/badge/Portfolio-%24327.4B+-gold)]()
 
 ---
 
@@ -12,14 +11,16 @@
 
 | | |
 |---|---|
-| **Total Portfolio Value** | **$327.4B+** |
-| **Federal Contracts** | 1,000 records · $169.9B |
+| **Federal Contracts (Multi-decade)** | 537 unique · $2.56T ceiling |
 | **Transit Grants** | 200 records · $112.4B |
-| **NTD Capital Expenses** | 12,096 records · ~$45B |
-| **Unique Vendors** | 181 |
+| **NTD Capital Expenses (2022–2024)** | 12,096 records · $83.5B |
+| **Agency Concentration (HHI)** | 4,963 — highly concentrated |
+| **Vendor Concentration (HHI)** | 439 — unconcentrated |
 | **Transit Agencies** | 900+ |
-| **Time Span** | 1993–2025 |
-| **Data Sources Verified** | 3 live APIs |
+| **Federal Agencies** | 10+ |
+| **Data Sources Verified** | 3 live APIs + 1 CSV dataset |
+
+**Important:** These are separate data sources with different scopes. Federal contracts span 1978–2100 (multi-decade ceilings). FTA NTD covers 2022–2024 actual capital expenses. They are NOT additive into a single "portfolio value."
 
 ---
 
@@ -27,13 +28,27 @@
 
 All data in this repository is sourced from verified federal government APIs and datasets. No synthetic or simulated data is used.
 
+### ⚠️ Important Scope Notes
+
+These three data sources measure **different things** and cannot be summed into a single "portfolio total":
+
+| Source | What It Measures | Time Scope | Total |
+|--------|-----------------|------------|-------|
+| USASpending Contracts | Multi-decade contract ceilings | 1978–2100 | $2.56T |
+| USASpending Grants | Actual grant obligations | 1999–2026 | $112.4B |
+| FTA NTD | Annual capital expenses reported | 2022–2024 | $83.5B |
+
+The $2.56T contract figure represents **maximum potential obligation** over contract lifetimes, not annual spending. The FTA NTD $83.5B is actual capital expenditure across 900+ agencies in 2022–2024. These are fundamentally different metrics.
+
 ### USASpending.gov Contracts
 - **API:** `https://api.usaspending.gov/api/v2/search/spending_by_award/`
-- **Records:** 1,000 federal contracts
-- **Total Obligations:** $169.9B
-- **Agencies:** 10 major federal agencies (DoD, DOE, NASA, HHS, VA, DHS, DOT, etc.)
-- **Vendors:** 181 unique contractors
-- **Time Range:** 1993–2025
+- **Records:** 1,000 rows (537 unique contracts after deduplication)
+- **Total Obligations:** $2.56T (multi-decade contract ceilings)
+- **Top Agency:** Department of Defense — $1,675B (65.4%)
+- **Top Vendor:** Lockheed Martin Corporation — $361.5B (14.1%)
+- **Vendor HHI:** 439 (unconcentrated — many vendors share the market)
+- **Agency HHI:** 4,963 (highly concentrated — DoD dominates)
+- **Time Range:** 1978–2100
 - **Fields:** award_id, recipient, award_amount, agency, sub_agency, NAICS, PSC, state, duration
 
 ### USASpending.gov Transit Grants
@@ -48,9 +63,11 @@ All data in this repository is sourced from verified federal government APIs and
 ### FTA National Transit Database (NTD)
 - **API:** `https://data.transportation.gov/resource/fphd-jyyj.csv` (Socrata)
 - **Records:** 12,096 capital expense records
+- **Total Capital:** $83.5B (2022–2024 combined)
 - **Agencies:** 900+ transit agencies
 - **Modes:** 19 transit modes (Bus, Demand Response, Commuter Rail, Light Rail, Heavy Rail, etc.)
-- **Report Year:** 2024
+- **Top Mode:** Heavy Rail — $5.3B (39.6% of total)
+- **Top Agency:** MTA New York City Transit — $4.4B
 - **Fields:** guideway, stations, vehicles, equipment, administrative buildings, total capital
 
 ---
@@ -84,9 +101,9 @@ capital-portfolio-governance/
 │   └── 18_capital_efficiency.html
 ├── dashboard.py                             # Streamlit app — 3 tabs
 ├── data/
-│   ├── federal_contracts_all.csv            # 1,000 contracts ($169.9B)
+│   ├── federal_contracts_all.csv            # 537 unique contracts ($2.56T ceiling)
 │   ├── usaspending_transit_grants.csv       # 200 grants ($112.4B)
-│   └── ntd_capital_expenses.csv             # 12,096 records
+│   └── ntd_capital_expenses.csv             # 12,096 records ($83.5B, 2022–2024)
 ├── requirements.txt
 └── README.md
 ```
@@ -97,9 +114,9 @@ capital-portfolio-governance/
 
 | Notebook | Charts | Key Insights |
 |----------|--------|--------------|
-| **01 Portfolio Overview** | 6 PNG | DoD dominates $127.8B (75%). Vendor HHI ~3,500 = highly concentrated. VA state leads at $38.6B. |
-| **02 Capital Investment** | 6 PNG | Demand Response = $13B mode leader. CA = $5B state leader. Rehab 55% vs Expansion 35%. |
-| **03 Executive Dashboard** | 6 HTML | Combined $327.4B portfolio. Grant HHI ~2,800. FTA grants heavily concentrated in MTA NY. |
+| **01 Portfolio Overview** | 6 PNG | DoD = 65.4% of contract value ($1,675B). Vendor HHI = 439 (unconcentrated). Agency HHI = 4,963 (highly concentrated). VA state leads geographic distribution. |
+| **02 Capital Investment** | 6 PNG | Heavy Rail = $5.3B (39.6%) of FTA capital. MTA NY = $4.4B top agency. Commuter Rail highest cost per vehicle. Bus + Rail = 96% of capital. |
+| **03 Executive Dashboard** | 6 HTML | Multi-source KPI cards. Contract timeline 1978–2100. Grant concentration by recipient. Capital efficiency bubble charts. |
 
 ---
 
@@ -120,20 +137,29 @@ streamlit run dashboard.py
 ## Key Findings
 
 ### Portfolio Concentration
-- **Federal contracts** are extremely concentrated: DoD = 75% of obligations, top vendor (Humana) = 30%
-- **Transit grants** are also concentrated: MTA NY receives $38B of $112B total (34%)
-- Vendor HHI of ~3,500 indicates a highly concentrated supplier market in federal transit contracting
+- **Federal contracts** are extremely concentrated by agency: DoD = 65.4% of all obligations ($1,675B of $2.56T)
+- **Vendor market** is unconcentrated: HHI = 439 across 168 vendors. Top vendor (Lockheed Martin) = 14.1%.
+- **Agency market** is highly concentrated: HHI = 4,963. Top 2 agencies (DoD + DOE) = 91%.
+- **Transit grants** show concentration: top 5 recipients capture significant share of $112.4B
 
-### Capital Patterns
-- **Demand Response** and **Bus** modes dominate capital spending (~$13B and ~$8B respectively)
-- **Rehabilitation/Reconstruction** accounts for 55% of capital vs 35% for expansion
-- **Commuter Rail** has the highest capital cost per vehicle (~$650K median)
-- **California** leads state capital investment at ~$5B
+### Capital Patterns (FTA NTD 2022–2024)
+- **Heavy Rail** dominates capital: $5.3B (39.6%)
+- **Commuter Rail** = $3.6B (26.6%), **Bus** = $2.2B (16.0%)
+- **Rail modes combined** = 79.5% of all capital ($10.6B)
+- **MTA New York City Transit** leads all agencies at $4.4B
+- Capital heavily concentrated in large urban agencies (top 5 = ~$9.4B, 48% of total)
 
 ### Temporal Trends
-- Contract obligations peaked in **2016** (~$50B) driven by DoD healthcare contracts
-- Grant awards peaked in **2020–2022** during COVID-era transit stimulus
-- Data spans **1993–2025** showing 30+ years of federal investment patterns
+- Contract obligations span **1978–2100** — these are multi-decade ceilings, not annual spending
+- Grant awards show variation by administration and stimulus cycles
+- FTA NTD data covers **2022–2024** — a three-year snapshot of actual capital reporting
+
+### Data Limitations (Honest Reporting)
+- USASpending contracts file contains **463 duplicate rows** (1,000 rows → 537 unique contracts)
+- Contract values represent **maximum ceiling amounts**, not actual annual disbursements
+- FTA NTD only covers **reported capital expenses** — not operational or maintenance spending
+- Only **426 of 1,000 FTA records** have non-zero capital (many agencies report zero or minimal capital)
+- Some USASpending transit grants have **missing recipient names** (shown as "N/A")
 
 ---
 
